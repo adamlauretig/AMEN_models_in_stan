@@ -54,8 +54,31 @@ m1 <- stan(file = "01_srm_stan.stan",
        n_dyads = data_for_stan$n_dyads,
        sender_id = data_for_stan$edgelist[, 1],
        receiver_id = data_for_stan$edgelist[, 2],
-       Y = data_for_stan$edgelist[, 3]), chains = 4, iter = 2000, cores = 4)
+       Y = data_for_stan$edgelist[, 3]), 
+     chains = 4, 
+     iter = 2000, 
+     cores = 4)
 
 m1_params <- extract(m1)
 preds <- apply(m1_params$Y_sim, 2, mean)
 plot(data_for_stan$edgelist[, 3], preds)
+
+
+m2 <- stan(file = "02_srm_stan_dyad.stan", 
+     data = list(
+       N = data_for_stan$N,
+       n_nodes = data_for_stan$n_nodes,
+       n_dyads = data_for_stan$n_dyads,
+       sender_id = data_for_stan$edgelist[, 1],
+       receiver_id = data_for_stan$edgelist[, 2],
+       dyad_id = data_for_stan$edgelist[, 4],
+       send_receive = data_for_stan$edgelist[, 5],
+       Y = data_for_stan$edgelist[, 3]), 
+     chains = 4, 
+     iter = 2000, 
+     cores = 4)
+
+
+m2_params <- extract(m2)
+preds2 <- apply(m2_params$Y_sim, 2, mean)
+plot(data_for_stan$edgelist[, 3], preds2)
