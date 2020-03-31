@@ -25,26 +25,38 @@ transformed parameters{
     
     mean_nodes = (diag_pre_multiply(
       sigma_nodes, corr_nodes) * z_nodes)'; // sd *correlation
-    mean_nodes = (diag_pre_multiply(
+    mean_multi_effects = (diag_pre_multiply(
       sigma_multi_effects, corr_multi_effects) * z_multi_effects)'; // sd *correlation  
     
 }
 model{
   intercept ~ normal(0, 5) ;
+  
+  //node terms
   to_vector(z_nodes) ~ normal(0, 1) ;
   corr_nodes ~ lkj_corr_cholesky(5) ;
   sigma_nodes ~ gamma(1, 1) ;
 
+  // multi-effect terms
+  to_vector(z_multi_effects) ~ normal(0, 1) ;
+  corr_multi_effects ~ lkj_corr_cholesky(5) ;
+  sigma_multi_effects ~ gamma(1, 1) ;
+
   for(n in 1:N){
   Y[n] ~ normal(intercept + 
-        mean_nodes[sender_id[n], 1] + mean_nodes[receiver_id[n], 2], 1 );
+        mean_nodes[sender_id[n], 1] + mean_nodes[receiver_id[n], 2] + 
+        mean_multi_effects[sender_id[n], 1:K] * 
+        (mean_multi_effects[receiver_id[n], (K+1):(K*2)])', 
+        1 );
   }
 }
 generated quantities{
   real Y_sim[N] ;
   for(n in 1:N){
     Y_sim[n] = normal_rng(intercept + 
-        mean_nodes[sender_id[n], 1] + mean_nodes[receiver_id[n], 2], 1) ;
+        mean_nodes[sender_id[n], 1] + mean_nodes[receiver_id[n], 2] + 
+        mean_multi_effects[sender_id[n], 1:K] * 
+        (mean_multi_effects[receiver_id[n], (K+1):(K*2)])', 1) ;
   }
   
 }
