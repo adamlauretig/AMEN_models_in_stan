@@ -1,0 +1,82 @@
+---
+title: "Implementing the Social Relations and AMEN model in Stan"
+author: "Adam M. Lauretig"
+date: "3/31/2020"
+output: github_document
+---
+
+# Introduction
+
+In a [recent review article](https://www.e-publications.org/ims/submission/STS/user/submissionFile/36407?confirm=150a239a), Peter Hoff discussed the Additive and Multiplicative Effects Network (AMEN) model, a of Bayesian hierarchical model for modeling network data. This model can be understood as a hierarchical model with a more structured covariance, to account for the network dependence between observations. While there is currently an [implementation in R](https://cran.r-project.org/web/packages/amen/index.html), I wanted to explore building this model up in [Stan](https://mc-stan.org/), a probabilistic programming language, and taking advantage of variational inference to fit models more quickly.
+
+In the remaining sections, I gather some example data, and fit a series of increasingly complex models to better capture the network structure. 
+
+# Dataset
+
+I use a dataset included in the `amen` package to demonstrate model-building: exports from one country to another (in billions of dollars), averaged over the 1990s. I convert the sociomatrix to a real-valued edgelist, with indicators for sending and receiving countries, dyads, and the direction of the dyad. Plotting the data, we see the long-tailed distribution often characteristic of network data. 
+
+```{r, eda_dataviz, cache = TRUE, echo = TRUE, eval = TRUE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(amen)
+
+
+
+# A function to convert a matrix of pairs to an edgelist
+# Assumes that rows == columns, but will check
+
+matrix_to_edgelist <- function(sociomatrix_to_convert){
+  
+  if(nrow(sociomatrix_to_convert) != ncol(sociomatrix_to_convert)){
+    stop("nrows != ncols")
+  }
+  
+  all_nodes <- expand.grid(
+    list(rownames(sociomatrix_to_convert), colnames(sociomatrix_to_convert)))
+  all_nodes[, 1] <- as.numeric(all_nodes[, 1])
+  all_nodes[, 2] <- as.numeric(all_nodes[, 2])
+  all_nodes <- all_nodes[all_nodes[, 1] != all_nodes[, 2], ]
+
+  lookup_table <- data.frame(
+    node_names = rownames(sociomatrix_to_convert), 
+    idx = as.numeric(factor(rownames(sociomatrix_to_convert))))
+  obs_values <- which(sociomatrix_to_convert != 0, arr.ind = TRUE)
+  obs_values <- cbind(obs_values, sociomatrix_to_convert[obs_values])
+ 
+   edgelist <- merge(
+    all_nodes, obs_values, by.x = c("Var1", "Var2"), 
+    by.y = c("row", "col"), all.x = TRUE)
+  
+  edgelist$V3 <- ifelse(is.na(edgelist$V3), 0, edgelist$V3)
+  edgelist <- cbind(
+    edgelist, 
+    rep(seq.int(from = 1, to = sum(edgelist[, 1] < edgelist[, 2])), 2))
+  edgelist <- cbind(edgelist, ifelse(edgelist[, 1] < edgelist[, 2], 1, 2))
+  colnames(edgelist) <- c("sender", "receiver", "y", "dyad_id", "sr_indicator")
+  # for dyad list include a (1, 2) indicator for send/receive
+  # if s < r -> 1, else 2
+  
+  return(list(edgelist = edgelist, lookup_table = lookup_table, 
+       n_nodes = max(edgelist[, 1]), n_dyads = max(edgelist[, 4]), 
+       N = nrow(edgelist)))
+  
+}
+
+data_for_stan <- matrix_to_edgelist(IR90s$dyadvars[, , 2]) # trade data
+
+y_df <- data.frame(y = data_for_stan$edgelist$y)
+ggplot(data = y_df, aes(x = y)) + geom_histogram() + theme_minimal() + labs(x = "Export Volume", y = "Frequency", title = "Distribution of Export Volume")
+
+```
+
+# Initial Model
+
+I begin with a simple fixed-effects model, where the outcome, $y_{i, j}$ is the exports from $\text{sender}_{i}$ to $\text{receiver}_{j}$.
+
+$$y_{i,j} \sim \mathcal{N}(\alpha + \beta_{\text{sender}_{i}} + \beta_{\text{receiver}_{j}}, 1) $$
+$$\alpha \sim \mathcal{N}(0, 10) $$
+
+$$\beta_{\text{sender}_{i}} \sim \mathcal{N}(0, 5)$$
+
+$$\beta_{\text{receiver}_{j}} \sim \mathcal{N}(0, 5)$$
+
+

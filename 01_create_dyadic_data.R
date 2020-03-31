@@ -45,7 +45,10 @@ matrix_to_edgelist <- function(sociomatrix_to_convert){
 
 data_for_stan <- matrix_to_edgelist(IR90s$dyadvars[, , 2]) # trade data
 
-m1 <- stan(file = "01_srm_stan.stan", 
+m1_code <- stan_model(file =  "01_srm_stan.stan"
+  )
+
+m1 <- vb(m1_code, 
      data = list(
        N = data_for_stan$N,
        n_nodes = data_for_stan$n_nodes,
@@ -54,16 +57,18 @@ m1 <- stan(file = "01_srm_stan.stan",
        receiver_id = data_for_stan$edgelist[, 2],
        Y = data_for_stan$edgelist[, 3]), 
      seed = 123,
-     chains = 4, 
-     iter = 2000, 
-     cores = 4)
+     # chains = 4, cores = 4,
+     iter = 10000 
+     )
 
 m1_params <- extract(m1)
 preds <- apply(m1_params$Y_sim, 2, mean)
 plot(data_for_stan$edgelist[, 3], preds)
 
+m2_code <- stan_model(file =  "02_srm_stan_dyad.stan"
+  )
 
-m2 <- stan(file = "02_srm_stan_dyad.stan", 
+m2 <- vb(m2_code, 
      data = list(
        N = data_for_stan$N,
        n_nodes = data_for_stan$n_nodes,
@@ -74,9 +79,9 @@ m2 <- stan(file = "02_srm_stan_dyad.stan",
        send_receive = data_for_stan$edgelist[, 5],
        Y = data_for_stan$edgelist[, 3]), 
      seed = 123,
-     chains = 4, 
-     iter = 2000, 
-     cores = 4)
+     # chains = 4, cores = 4,
+     iter = 10000 
+     )
 
 
 m2_params <- extract(m2)
@@ -87,15 +92,17 @@ plot(data_for_stan$edgelist[, 3], preds2)
 m3_code <- stan_model(file =  "03_amen_stan.stan"
   )
 
-m3 <- sampling(m3_code, 
+m3 <- vb(m3_code, 
      data = list(
        N = data_for_stan$N,
        n_nodes = data_for_stan$n_nodes,
        n_dyads = data_for_stan$n_dyads,
        sender_id = data_for_stan$edgelist[, 1],
        receiver_id = data_for_stan$edgelist[, 2],
-       K = 5,
-       Y = data_for_stan$edgelist[, 3]), chains = 4, cores = 4, iter = 2000, 
+       K = 10,
+       Y = data_for_stan$edgelist[, 3]), 
+     # chains = 4, cores = 4, 
+     iter = 10000, 
      seed = 123)
 
 m3_params <- extract(m3)
