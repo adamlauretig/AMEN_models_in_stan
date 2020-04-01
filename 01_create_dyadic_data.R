@@ -132,4 +132,9 @@ m3_params <- extract(m3)
 preds3 <- apply(m3_params$Y_sim, 2, mean)
 plot(data_for_stan$edgelist[, 3], preds3)
 
+mean((data_for_stan$edgelist[, 3] - preds0)^2)
+mean((data_for_stan$edgelist[, 3] - preds)^2)
+mean((data_for_stan$edgelist[, 3] - preds2)^2)
+
 mean((data_for_stan$edgelist[, 3] - preds3)^2)
+save(m0, m1, m2, m3, file = "srm_amen_stan.rdata")

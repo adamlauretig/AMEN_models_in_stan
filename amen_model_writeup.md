@@ -86,11 +86,16 @@ ggplot(data = y_df, aes(x = y)) + geom_histogram() + theme_minimal() + labs(x = 
 # Initial Model
 
 I begin with a simple fixed-effects model, where the outcome,
-\(y_{i, j}\) is the exports from \(\text{sender}_{i}\) to
-\(\text{receiver}_{j}\).
+<img src="https://render.githubusercontent.com/render/math?math=y_{i,j}">
+is the exports from
+<img src="https://render.githubusercontent.com/render/math?math=sender_{i}">
+to
+<img src="https://render.githubusercontent.com/render/math?math=receiver_{j}">.
 
-\[y_{i,j} \sim \mathcal{N}(\alpha + \beta_{\text{sender}_{i}} + \beta_{\text{receiver}_{j}}, 1) \]
-\[\alpha \sim \mathcal{N}(0, 5) \]
+<img src="https://render.githubusercontent.com/render/math?math=y_{i,j}%20\sim%20\mathcal{N}(\alpha%20+%20\beta_{\text{sender}_{i}}%20+%20\beta_{\text{receiver}_{j}})">
+<img src="https://render.githubusercontent.com/render/math?math=y_{i,j}">
+is the exports from
+<img src="https://render.githubusercontent.com/render/math?math=\alpha\sim\mathcal{N}(0,5)">
 
 \[\beta_{\text{sender}_{i}} \sim \mathcal{N}(0, 5)\]
 
