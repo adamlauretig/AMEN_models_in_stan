@@ -90,7 +90,7 @@ I begin with a simple fixed-effects model, where the outcome,
 \(\text{receiver}_{j}\).
 
 \[y_{i,j} \sim \mathcal{N}(\alpha + \beta_{\text{sender}_{i}} + \beta_{\text{receiver}_{j}}, 1) \]
-\[\alpha \sim \mathcal{N}(0, 10) \]
+\[\alpha \sim \mathcal{N}(0, 5) \]
 
 \[\beta_{\text{sender}_{i}} \sim \mathcal{N}(0, 5)\]
 

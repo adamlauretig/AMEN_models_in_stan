@@ -45,6 +45,29 @@ matrix_to_edgelist <- function(sociomatrix_to_convert){
 
 data_for_stan <- matrix_to_edgelist(IR90s$dyadvars[, , 2]) # trade data
 
+
+
+
+m0_code <- stan_model(file =  "00_fixed_effect.stan"
+  )
+
+m0 <- vb(m0_code, 
+     data = list(
+       N = data_for_stan$N,
+       n_nodes = data_for_stan$n_nodes,
+       n_dyads = data_for_stan$n_dyads,
+       sender_id = data_for_stan$edgelist[, 1],
+       receiver_id = data_for_stan$edgelist[, 2],
+       Y = data_for_stan$edgelist[, 3]), 
+     seed = 123,
+     # chains = 4, cores = 4,
+     iter = 10000 
+     )
+
+m0_params <- extract(m0)
+preds0 <- apply(m0_params$Y_sim, 2, mean)
+plot(data_for_stan$edgelist[, 3], preds0)
+
 m1_code <- stan_model(file =  "01_srm_stan.stan"
   )
 
