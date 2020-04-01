@@ -2,7 +2,7 @@
 title: "Implementing the Social Relations and AMEN model in Stan"
 author: "Adam M. Lauretig"
 date: "3/31/2020"
-output: github_document
+output: html_document
 ---
 
 # Introduction
