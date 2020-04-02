@@ -2,23 +2,30 @@
 title: "Implementing the Social Relations and AMEN model in Stan"
 author: "Adam M. Lauretig"
 date: "3/31/2020"
-output: html_document
+output: pdf_document
+mainfont: Palatino
+header-includes:
+  - \usepackage{palatino}
 ---
 
 # Introduction
 
-In a [recent review article](https://www.e-publications.org/ims/submission/STS/user/submissionFile/36407?confirm=150a239a), Peter Hoff discussed the Additive and Multiplicative Effects Network (AMEN) model, a of Bayesian hierarchical model for modeling network data. This model can be understood as a hierarchical model with a more structured covariance, to account for the network dependence between observations. While there is currently an [implementation in R](https://cran.r-project.org/web/packages/amen/index.html), I wanted to explore building this model up in [Stan](https://mc-stan.org/), a probabilistic programming language, and taking advantage of variational inference to fit models more quickly.
+In a [recent review article](https://www.e-publications.org/ims/submission/STS/user/submissionFile/36407?confirm=150a239a), Peter Hoff discussed the Additive and Multiplicative Effects Network (AMEN) model, a of Bayesian hierarchical model for modeling network data. This model can be understood as a hierarchical model with a more structured covariance, to account for the network dependence between observations. While there is currently an [implementation in R](https://cran.r-project.org/web/packages/amen/index.html), I wanted to explore building this model up in [Stan](https://mc-stan.org/), a probabilistic programming language, and taking advantage of variational inference to fit models more quickly. 
 
-In the remaining sections, I gather some example data, and fit a series of increasingly complex models to better capture the network structure. 
+These models were all fit in stan using the `vb()` function, which meant they were fit quickly. Stan is fast, and provides a variety of diagnostic tools, though final work should probably use dynamic HMC/NUTS sampling.
+
+In the remaining sections, I gather some example data, and a fixed effects model, a social relations model, and an AMEN model to trade data from the 1990s.
 
 # Dataset
 
 I use a dataset included in the `amen` package to demonstrate model-building: exports from one country to another (in billions of dollars), averaged over the 1990s. I convert the sociomatrix to a real-valued edgelist, with indicators for sending and receiving countries, dyads, and the direction of the dyad. Plotting the data, we see the long-tailed distribution often characteristic of network data. 
 
-```{r, eda_dataviz, cache = TRUE, echo = TRUE, eval = TRUE, warning=FALSE, message=FALSE}
+\clearpage
+
+```{r, eda_dataviz, cache = TRUE, echo = TRUE, eval = TRUE, warning=FALSE, message=FALSE, size = "small"}
 library(ggplot2)
 library(amen)
-
+library(rstan)
 
 
 # A function to convert a matrix of pairs to an edgelist
@@ -68,7 +75,9 @@ ggplot(data = y_df, aes(x = y)) + geom_histogram() + theme_minimal() + labs(x = 
 
 ```
 
-# Initial Model
+\clearpage
+
+# Fixed Effects Model
 
 I begin with a simple fixed-effects model, where the outcome, $y_{i, j}$ is the exports from $\text{sender}_{i}$ to $\text{receiver}_{j}$.
 
@@ -78,5 +87,261 @@ $$\alpha \sim \mathcal{N}(0, 5) $$
 $$\beta_{\text{sender}_{i}} \sim \mathcal{N}(0, 5)$$
 
 $$\beta_{\text{receiver}_{j}} \sim \mathcal{N}(0, 5)$$
+\clearpage
 
+```{stan, output.var = "m0_stan", echo = TRUE, eval = FALSE, size = "small"}
+
+data{
+  int n_nodes ;
+  int n_dyads ;
+  int N; //total obs. should be n_dyads * 2
+  int sender_id[n_dyads * 2] ; //indexing for sender
+  int receiver_id[n_dyads * 2] ; //indexing for receivers
+  real Y[n_dyads * 2] ; // outcome variable
+  
+}
+parameters{
+  real intercept ;
+  vector[n_nodes] sender_beta; //fixed effects
+  vector[n_nodes] receiver_beta;  //fixed effects
+}
+
+model{
+  intercept ~ normal(0, 5) ;
+  sender_beta ~ normal(0, 5) ;
+  receiver_beta ~ normal(0, 5) ;
+
+  for(n in 1:N){
+  Y[n] ~ normal(intercept + 
+        sender_beta[sender_id[n]] + receiver_beta[receiver_id[n]], 1 );
+  }
+}
+generated quantities{
+  real Y_sim[N] ;
+  for(n in 1:N){
+    Y_sim[n] = normal_rng(intercept + 
+        sender_beta[sender_id[n]] + receiver_beta[receiver_id[n]], 1) ;
+  }
+  
+}
+
+```
+
+
+```{r, load_saved_objects, echo = FALSE, message = FALSE, warning = FALSE, cache = TRUE, size = "small"}
+library(rstan)
+load("srm_amen_stan.rdata")
+
+```
+
+
+\clearpage
+
+Examining the posterior predictive check from the fixed effects model, we see a model with some clear fit problems, for example, in the scatterplot, the axes are different by an order of magnitude. In this model, the point predictions are the posterior means of outcomes simulated from the fitted model.
+
+```{r, m0_ppc, echo = TRUE, cache = TRUE, message=FALSE, warning=FALSE, size = "small"}
+library(bayesplot)
+color_scheme_set("red")
+
+m0_params <- extract(m0)
+to_visualize <- data.frame(y = y_df$y, y_sim = colMeans(m0_params$Y_sim))
+mse_0 <- mean((to_visualize$y - to_visualize$y_sim)^2)
+
+
+#ppc_dens_overlay(y = y_df$y, yrep = m0_params$Y_sim)
+ggplot(data = to_visualize, aes(x = y, y = y_sim)) + 
+  geom_point(alpha = .1) + 
+  theme_minimal() + 
+  labs(x = "Observed Y", y = "Predicted Fit", title = paste0("Mean Squared Error is ", round(mse_0, 4)))
+```
+
+# Social Relations Model
+
+To improve model fit, we can incorporate covariance between sender and receiver. In concrete terms, this means that we assume that US exports covary with US imports. To model this, we turn to the *social relations model*, where the outcome, $y_{i, j}$ is the exports from $\text{sender}_{i}$ to $\text{receiver}_{j}$, however, we add additional structure to the covariances.
+
+$$y_{i,j} \sim \mathcal{N}(\alpha + \beta_{\text{sender}_{i}} + \beta_{\text{receiver}_{j}}, 1) $$
+$$\alpha \sim \mathcal{N}(0, 5) $$
+
+$$ \pmb{\beta}_{1\times2} \sim \mathcal{MVN}(\pmb{0}, \pmb{\Sigma})$$
+$$ \pmb{\Sigma} = \pmb{\sigma}  \pmb{\Omega}_{\text{cholesky}}$$
+$$ \pmb{\sigma} \sim \text{Gam}(1, 1)$$ 
+$$\pmb{\Omega}_{\text{cholesky}} \sim \mathcal{LKJ}(5)$$
+
+\clearpage
+
+In Stan, this is written as follows, with the non-centered parameterization used for the Multivariate normal:
+
+```{stan output.var="m1_srm", echo = TRUE, eval = FALSE, size = "small"}
+
+data{
+  int n_nodes ;
+  int n_dyads ;
+  int N; //total obs. should be n_dyads * 2
+  int sender_id[n_dyads * 2] ;
+  int receiver_id[n_dyads * 2] ;
+  real Y[n_dyads * 2] ;
+  
+}
+parameters{
+  real intercept ;
+  cholesky_factor_corr[2] corr_nodes; // correlation matrix 
+  vector<lower=0>[2] sigma_nodes; // sd 
+  matrix[2, n_nodes] z_nodes ; // for node non-centered parameterization
+}
+transformed parameters{
+    matrix[n_nodes, 2] mean_nodes; 
+    mean_nodes = (diag_pre_multiply(
+      sigma_nodes, corr_nodes) * z_nodes)'; // non-centered parameterization
+}
+model{
+  intercept ~ normal(0, 5) ;
+  to_vector(z_nodes) ~ normal(0, 1) ;
+  corr_nodes ~ lkj_corr_cholesky(5) ;
+  sigma_nodes ~ gamma(1, 1) ;
+
+  for(n in 1:N){
+  Y[n] ~ normal(intercept + 
+        mean_nodes[sender_id[n], 1] + mean_nodes[receiver_id[n], 2], 1 );
+  }
+}
+generated quantities{
+  real Y_sim[N] ;
+  for(n in 1:N){
+    Y_sim[n] = normal_rng(intercept + 
+        mean_nodes[sender_id[n], 1] + mean_nodes[receiver_id[n], 2], 1) ;
+  }
+  
+}
+
+```
+
+\clearpage
+
+Examining fit from this model, we see that fit is largely the same, likely because despite allowing for covariance between sender and receiver effects, we are still imposing a strong additive relationship:
+
+
+```{r, m1_ppc, echo = TRUE, cache = TRUE, message=FALSE, warning=FALSE, size = "small"}
+library(bayesplot)
+color_scheme_set("red")
+
+m1_params <- extract(m1)
+to_visualize1 <- data.frame(y = y_df$y, y_sim = colMeans(m1_params$Y_sim))
+mse_1 <- mean((to_visualize1$y - to_visualize1$y_sim)^2)
+
+
+#ppc_dens_overlay(y = y_df$y, yrep = m1_params$Y_sim)
+ggplot(data = to_visualize1, aes(x = y, y = y_sim)) + 
+  geom_point(alpha = .1) + 
+  theme_minimal() + 
+  labs(x = "Observed Y", y = "Predicted Fit", title = paste0("Mean Squared Error is ", round(mse_1, 4)))
+```
+
+# Additive and Multiplicative Effects Network Model
+
+To relax the assumption of additivity in the parameters, [Peter Hoff](https://www.e-publications.org/ims/submission/STS/user/submissionFile/36407?confirm=150a239a) suggests the Additive and Multiplicative Effects Network (AMEN) Model. This adds a latent multiplicative effect to capture a higher-order network representation. This effect, for a given observation $y_{i,j}$ is modeled by the inner product $\pmb{u}_{\text{sender}_{i}} \cdot \pmb{v}_{\text{receiver}_{j}}^\top$, where $\pmb{u}$ and $\pmb{v}$ both have $1 \times K$ dimensions. These are concatenated together, and their covariance is modeled with a $2K \times 2K$ covariance matrix.
+
+
+$$y_{i,j} \sim \mathcal{N}(\alpha + \beta_{\text{sender}_{i}} + \beta_{\text{receiver}_{j}} + (\pmb{u}_{\text{sender}_{i}} \cdot \pmb{v}_{\text{receiver}_{j}}^\top), 1) $$
+$$\alpha \sim \mathcal{N}(0, 5) $$
+
+$$ \pmb{\beta}_{1\times2} \sim \mathcal{MVN}(\pmb{0}, \pmb{\Sigma})$$
+$$ \pmb{\Sigma} = \pmb{\sigma}  \pmb{\Omega}_{\text{cholesky}}$$
+$$ \pmb{\sigma} \sim \text{Gam}(1, 1)$$ 
+$$\pmb{\Omega}_{\text{cholesky}} \sim \mathcal{LKJ}(5)$$
+$$ c(\pmb{u}_{\text{sender}_{i}}, \pmb{v}_{\text{receiver}_{j}}^\top) \sim \mathcal{MVN}(\pmb{0}, \pmb{\Sigma}_{\pmb{u}, \pmb{v}})$$
+$$ \pmb{\Sigma}_{\pmb{u}, \pmb{v}}  = \pmb{\sigma}_{\pmb{u}, \pmb{v}}  \pmb{\Omega}_{\pmb{u}, \pmb{v}_{\text{cholesky}}}$$
+$$ \pmb{\sigma}_{\pmb{u}, \pmb{v}} \sim \text{Gam}(1, 1)$$ 
+$$\pmb{\Omega}_{\pmb{u}, \pmb{v}_{\text{cholesky}}} \sim \mathcal{LKJ}(5)$$
+
+\clearpage
+In stan, this is written as follows, with non-centered parameterizations for all multivariate normals:
+```{stan output.var="m3_amen", echo = TRUE, eval = FALSE, size = "small"}
+
+data{
+  int n_nodes ;
+  int n_dyads ;
+  int N; //total obs. should be n_dyads * 2
+  int sender_id[n_dyads * 2] ;
+  int receiver_id[n_dyads * 2] ;
+  int K ; // number of latent dimensions
+  real Y[n_dyads * 2] ;
+  
+}
+parameters{
+  real intercept ;
+  cholesky_factor_corr[2] corr_nodes; // correlation matrix for additive noteeffects
+  vector<lower=0>[2] sigma_nodes; // sd w/in nodes
+  matrix[2, n_nodes] z_nodes ; // for node non-centered parameterization
+  cholesky_factor_corr[K * 2] corr_multi_effects ; // correlation matrix for multiplicative effect
+  vector<lower=0>[K * 2] sigma_multi_effects ; // sd
+  matrix[K * 2, n_nodes] z_multi_effects; // Multi-effect non-centered term 
+  
+}
+transformed parameters{
+    matrix[n_nodes, 2] mean_nodes; // node parameter mean
+    matrix[n_nodes, K * 2] mean_multi_effects ; // multi-effect mean
+    
+    mean_nodes = (diag_pre_multiply(
+      sigma_nodes, corr_nodes) * z_nodes)'; // sd *correlation
+    mean_multi_effects = (diag_pre_multiply(
+      sigma_multi_effects, corr_multi_effects) * z_multi_effects)'; // sd *correlation  
+    
+}
+model{
+  intercept ~ normal(0, 5) ;
+  
+  //node terms
+  to_vector(z_nodes) ~ normal(0, 1) ;
+  corr_nodes ~ lkj_corr_cholesky(5) ;
+  sigma_nodes ~ gamma(1, 1) ;
+
+  // multi-effect terms
+  to_vector(z_multi_effects) ~ normal(0, 1) ;
+  corr_multi_effects ~ lkj_corr_cholesky(5) ;
+  sigma_multi_effects ~ gamma(1, 1) ;
+
+  for(n in 1:N){
+  Y[n] ~ normal(intercept + 
+        mean_nodes[sender_id[n], 1] + mean_nodes[receiver_id[n], 2] + 
+        mean_multi_effects[sender_id[n], 1:K] * 
+        (mean_multi_effects[receiver_id[n], (K+1):(K*2)])', 
+        1 );
+  }
+}
+generated quantities{
+  real Y_sim[N] ;
+  for(n in 1:N){
+    Y_sim[n] = normal_rng(intercept + 
+        mean_nodes[sender_id[n], 1] + mean_nodes[receiver_id[n], 2] + 
+        mean_multi_effects[sender_id[n], 1:K] * 
+        (mean_multi_effects[receiver_id[n], (K+1):(K*2)])', 1) ;
+  }
+  
+}
+
+```
+
+\clearpage
+
+```{r, m3_ppc, echo = TRUE, cache = TRUE, message=FALSE, warning=FALSE, size = "small"}
+library(bayesplot)
+color_scheme_set("red")
+
+m3_params <- extract(m3)
+to_visualize3 <- data.frame(y = y_df$y, y_sim = colMeans(m3_params$Y_sim))
+mse_3 <- mean((to_visualize3$y - to_visualize3$y_sim)^2)
+
+
+#ppc_dens_overlay(y = y_df$y, yrep = m3_params$Y_sim)
+ggplot(data = to_visualize3, aes(x = y, y = y_sim)) + 
+  geom_point(alpha = .1) + 
+  theme_minimal() + 
+  labs(x = "Observed Y", y = "Predicted Fit", title = paste0("Mean Squared Error is ", round(mse_3, 4)))
+```
+
+We see that the AMEN model can much more effectively model the outcome variable, with a much lower mean squared error, and that the scale of the predicted outcomes is much closer to the actual outcomes. 
+
+# Discussion
+
+We have seen that the multiplicative effects model does a far better job of modeling the distribution of $\pmb{y}$ than either the fixed effects model, or the social relations model. That the model fit changes so dramatically suggests the importance of taking network structure seriously in modeling. One further extension would involve incorporating covariates into the model, in order to take advantage of additional estimation when estimating model fit.
 

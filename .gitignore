@@ -1,2 +1,5 @@
 
 srm_amen_stan.rdata
+*.RData
+*.rdx
+*.rdb
