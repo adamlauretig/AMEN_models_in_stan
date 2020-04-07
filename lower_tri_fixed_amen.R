@@ -62,7 +62,12 @@ m4 <- vb(m4_code,
      seed = 123)
 
 m4_params <- extract(m4)
+
 preds4 <- apply(m4_params$Y_sim, 2, mean)
 plot(data_for_stan$edgelist[, 3], preds4)
-
 mean((data_for_stan$edgelist[, 3] - preds4)^2)
+
+
+latent_params <- apply(m4_params$mean_multi_effects, c(2:3), mean)
+plot(latent_params[, 1], latent_params[, 11])
+plot(latent_params[, 10], latent_params[, 20])
