@@ -1,5 +1,6 @@
 library(amen)
 library(rstan)
+library(data.table)
 data(IR90s)
 
 
@@ -55,7 +56,7 @@ m4 <- vb(m4_code,
        n_dyads = data_for_stan$n_dyads,
        sender_id = data_for_stan$edgelist[, 1],
        receiver_id = data_for_stan$edgelist[, 2],
-       K = 10,
+       K = 5,
        Y = data_for_stan$edgelist[, 3]), 
      # chains = 4, cores = 4, 
      iter = 10000, 
@@ -69,5 +70,10 @@ mean((data_for_stan$edgelist[, 3] - preds4)^2)
 
 
 latent_params <- apply(m4_params$mean_multi_effects, c(2:3), mean)
-plot(latent_params[, 1], latent_params[, 11])
-plot(latent_params[, 10], latent_params[, 20])
+latent_params_dt <- data.table(latent_params)
+setnames(latent_params_dt, c(paste0("sender_", 1:5), paste0("receiver_", 1:5)))
+latent_params_dt$country <- data_for_stan$lookup_table[, 1]
+latent_params_dt <- melt(latent_params_dt, id.vars = "country")
+latent_params_dt[, c("sr", "dim_num") := tstrsplit(variable, "_")]
+latent_params_dt <- dcast(latent_params_dt, country + dim_num ~ sr)
+ggplot(data = latent_params_dt, aes(x = sender, y = receiver)) + geom_text(aes(label = country)) + facet_wrap(~dim_num)
