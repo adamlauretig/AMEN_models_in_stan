@@ -76,4 +76,14 @@ latent_params_dt$country <- data_for_stan$lookup_table[, 1]
 latent_params_dt <- melt(latent_params_dt, id.vars = "country")
 latent_params_dt[, c("sr", "dim_num") := tstrsplit(variable, "_")]
 latent_params_dt <- dcast(latent_params_dt, country + dim_num ~ sr)
-ggplot(data = latent_params_dt, aes(x = sender, y = receiver)) + geom_text(aes(label = country)) + facet_wrap(~dim_num)
+ggplot(data = latent_params_dt, aes(x = sender, y = receiver)) + 
+  geom_text(aes(label = country)) + 
+  facet_wrap(~dim_num)
+ggplot(data = latent_params_dt, aes(x = sender, y = receiver)) + 
+  geom_text(aes(label = country)) + 
+  facet_wrap(~dim_num) + 
+  scale_x_continuous(limits = c(-4, 4)) + scale_y_continuous(limits = c(-4, 4))
+ggplot(data = latent_params_dt, aes(x = sender, y = receiver)) + 
+  geom_text(aes(label = country)) + 
+  facet_wrap(~dim_num) + 
+  scale_x_continuous(limits = c(-1, 1)) + scale_y_continuous(limits = c(-1, 1))
