@@ -1,4 +1,5 @@
-
+// code for an AMEN model where the lower triangle of the covariance matrices
+// are fixed, allowing latent components to be identified.
 data{
   int n_nodes ;
   int n_dyads ;

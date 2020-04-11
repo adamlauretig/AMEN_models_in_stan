@@ -1,3 +1,5 @@
+# fitting a stan model with an AMEN model with an identified lower triangle
+
 library(amen)
 library(rstan)
 library(data.table)
