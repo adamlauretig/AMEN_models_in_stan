@@ -1,8 +1,5 @@
-# fitting a stan model with an AMEN model with an identified lower triangle
-
 library(amen)
 library(rstan)
-library(data.table)
 data(IR90s)
 
 
@@ -48,25 +45,4 @@ matrix_to_edgelist <- function(sociomatrix_to_convert){
 
 data_for_stan <- matrix_to_edgelist(IR90s$dyadvars[, , 2]) # trade data
 
-m4_code <- stan_model(file =  "04_stan_fixed_lower_tri.stan"
-  )
- 
 
-latent_params <- apply(m4_params$mean_multi_effects, c(2:3), mean)
-latent_params_dt <- data.table(latent_params)
-setnames(latent_params_dt, c(paste0("sender_", 1:9), paste0("receiver_", 1:9)))
-latent_params_dt$country <- data_for_stan$lookup_table[, 1]
-latent_params_dt <- melt(latent_params_dt, id.vars = "country")
-latent_params_dt[, c("sr", "dim_num") := tstrsplit(variable, "_")]
-latent_params_dt <- dcast(latent_params_dt, country + dim_num ~ sr)
-ggplot(data = latent_params_dt, aes(x = sender, y = receiver)) + 
-  geom_text(aes(label = country)) + 
-  facet_wrap(~dim_num)
-ggplot(data = latent_params_dt, aes(x = sender, y = receiver)) + 
-  geom_text(aes(label = country)) + 
-  facet_wrap(~dim_num) + 
-  scale_x_continuous(limits = c(-4, 4)) + scale_y_continuous(limits = c(-4, 4))
-ggplot(data = latent_params_dt, aes(x = sender, y = receiver)) + 
-  geom_text(aes(label = country)) + 
-  facet_wrap(~dim_num) + 
-  scale_x_continuous(limits = c(-1, 1)) + scale_y_continuous(limits = c(-1, 1))

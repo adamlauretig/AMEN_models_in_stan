@@ -10,7 +10,7 @@ header-includes:
 
 # Introduction
 
-In a [recent review article](https://www.e-publications.org/ims/submission/STS/user/submissionFile/36407?confirm=150a239a), Peter Hoff discussed the Additive and Multiplicative Effects Network (AMEN) model, a of Bayesian hierarchical model for modeling network data. This model can be understood as a hierarchical model with a more structured covariance, to account for the network dependence between observations. While there is currently an [implementation in R](https://cran.r-project.org/web/packages/amen/index.html), I wanted to explore building this model up in [Stan](https://mc-stan.org/), a probabilistic programming language, and taking advantage of variational inference to fit models more quickly. 
+In a [recent review article](https://www.e-publications.org/ims/submission/STS/user/submissionFile/36407?confirm=150a239a), Peter Hoff discussed the Additive and Multiplicative Effects Network (AMEN) model, a Bayesian hierarchical model, developed by Minhas, Hoff, and Ward for modeling network data. This model can be understood as a hierarchical model with a more structured covariance, to account for the network dependence between observations. While there is currently an [implementation in R](https://cran.r-project.org/web/packages/amen/index.html), I wanted to explore building this model up in [Stan](https://mc-stan.org/), a probabilistic programming language, and taking advantage of variational inference to fit models more quickly. 
 
 These models were all fit in stan using the `vb()` function, which meant they were fit quickly. Stan is fast, and provides a variety of diagnostic tools, though final work should probably use dynamic HMC/NUTS sampling.
 
