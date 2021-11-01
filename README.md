@@ -1,6 +1,6 @@
 # AMEN Models in Stan
 
-This repository contains code to implement Peter Hoff's AMEN model in R and stan, via rstan. 
+This repository contains code to implement Minhas, Hoff, and Ward's AMEN model in R and stan, via rstan. 
 
 It contains the following files:
 
